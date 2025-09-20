@@ -86,7 +86,6 @@ export default function Dashboard(): React.ReactElement {
                                 Alphabetical
                             </button>
                         </div>
-                        {/* Display mode buttons */}
                         <div className="flex items-center space-x-2 mt-4 sm:mt-0">
                             <button
                                 onClick={() => setDisplayMode('translation')}

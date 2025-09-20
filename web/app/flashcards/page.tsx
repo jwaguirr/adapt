@@ -108,7 +108,7 @@ export default function FlashcardGame(): React.ReactElement {
                 setIsSpeaking(false);
         }
     };
-    
+
     const handleNext = (): void => {
         setIsFlipped(false);
         setSelectedAnswer(null);
