@@ -12,6 +12,12 @@ interface PhraseCard {
   translation: string;
   location: string;
   created_at: string;
+  example?: string;
+  desc?: string;
+  term_id?: number;
+  term?: string;
+  term_location?: string;
+  term_translation?: string;
 }
 
 const supabaseUrl = "https://myynwsmgvnrpekpzvhkp.supabase.co";
@@ -65,13 +71,44 @@ export default function Dashboard(): React.ReactElement {
   useEffect(() => {
     const fetchPhrases = async () => {
       setLoading(true);
-      const { data, error } = await supabase.from("Data").select("*");
+      const { data, error } = await supabase
+        .from("Encounter")
+        .select(
+          `
+          *,
+          Term (
+            id,
+            location,
+            term,
+            desc,
+            example,
+            translation_spanish
+          )
+        `
+        )
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false });
       console.log("Fetched data:", data, "Error:", error);
 
       if (error) {
         console.error("Error fetching phrases:", error);
       } else if (data) {
-        setPhrases(data);
+        // Map returned data to PhraseCard structure
+        const mapped = data.map((item: any) => ({
+          id: item.id,
+          phrase: item.Term?.term || item.term || "",
+          context: item.context || item.Term?.example || "",
+          translation: item.Term?.translation_spanish || "",
+          location: item.location || item.Term?.location || "",
+          created_at: item.created_at,
+          example: item.Term?.example,
+          desc: item.Term?.desc,
+          term_id: item.Term?.id,
+          term: item.Term?.term,
+          term_location: item.Term?.location,
+          term_translation: item.Term?.translation_spanish,
+        }));
+        setPhrases(mapped);
       }
       setLoading(false);
     };
@@ -173,7 +210,7 @@ export default function Dashboard(): React.ReactElement {
                 )}`}
               >
                 <BookOpen size={16} className="mr-2" />
-                Show Contexts
+                Show Encounters
               </button>
             </div>
           </div>
@@ -188,60 +225,81 @@ export default function Dashboard(): React.ReactElement {
                 </h3>
                 {displayMode === "context" ? (
                   <>
-                    <h3 className="col-span-12 md:col-span-3 text-sm font-bold text-gray-500 uppercase tracking-wider">
+                    <h3 className="col-span-12 md:col-span-8 text-sm font-bold text-gray-500 uppercase tracking-wider">
                       Context
                     </h3>
-                    <h3 className="col-span-12 md:col-span-3 text-sm font-bold text-gray-500 uppercase tracking-wider">
-                      Time
-                    </h3>
-                    <h3 className="col-span-12 md:col-span-3 text-sm font-bold text-gray-500 uppercase tracking-wider">
+                    <h3 className="col-span-12 md:col-span-1 text-sm font-bold text-gray-500 uppercase tracking-wider">
                       Location
                     </h3>
                   </>
                 ) : (
-                  <h3 className="col-span-12 md:col-span-9 text-sm font-bold text-gray-500 uppercase tracking-wider">
-                    Translation
-                  </h3>
+                  <>
+                    <h3 className="col-span-12 md:col-span-6 text-sm font-bold text-gray-500 uppercase tracking-wider">
+                      Translation
+                    </h3>
+                    <h3 className="col-span-12 md:col-span-3 text-sm font-bold text-gray-500 uppercase tracking-wider">
+                      Example
+                    </h3>
+                  </>
                 )}
               </div>
+              
               {sortedPhrasesForDisplay.map((card) => (
                 <div
                   key={card.id}
-                  className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-300 p-4 sm:p-6"
+                  className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200"
                 >
-                  <div className="grid grid-cols-12 gap-4 items-center">
+                  <div className="grid grid-cols-12 gap-4">
                     <div className="col-span-12 md:col-span-3">
-                      <p className="font-semibold text-lg text-gray-900">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-1">
                         {card.phrase}
-                      </p>
+                      </h3>
+                      {displayMode === "context" ? (
+                        <span className="text-xs text-gray-500 uppercase tracking-wider">
+                            {formatDisplayTime(card.created_at)}
+                        </span>
+                      ) : null}
                     </div>
+                    
                     {displayMode === "context" ? (
                       <>
-                        <div className="col-span-12 md:col-span-3">
+                        <div className="col-span-12 md:col-span-8">
                           <p
                             className="text-gray-700 leading-relaxed"
                             dangerouslySetInnerHTML={{
                               __html: formatContext(card.context, card.phrase),
                             }}
                           />
+                          {card.example && (
+                            <p className="text-xs text-gray-400 mt-1">
+                              Example: {card.example}
+                            </p>
+                          )}
                         </div>
-                        <div className="col-span-12 md:col-span-3">
-                          <p className="text-gray-700 leading-relaxed">
-                            {formatDisplayTime(card.created_at)}
-                          </p>
-                        </div>
-                        <div className="col-span-12 md:col-span-3">
-                          <p className="text-gray-700 leading-relaxed">
+                        <div className="col-span-12 md:col-span-1">
+                          <p className="text-gray-700 leading-relaxed text-sm">
                             {card.location}
                           </p>
                         </div>
                       </>
                     ) : (
-                      <div className="col-span-12 md:col-span-9">
-                        <p className="text-gray-700 leading-relaxed">
-                          {card.translation}
-                        </p>
-                      </div>
+                      <>
+                        <div className="col-span-12 md:col-span-6">
+                          <p className="text-gray-700 leading-relaxed">
+                            {card.translation}
+                          </p>
+                          {card.desc && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              {card.desc}
+                            </p>
+                          )}
+                        </div>
+                        <div className="col-span-12 md:col-span-3">
+                          <p className="text-gray-700 leading-relaxed">
+                            {card.example || ""}
+                          </p>
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
