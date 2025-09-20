@@ -6,9 +6,12 @@ import {
   ChevronRight,
   Volume2,
   Settings,
-  Shuffle,
+  RefreshCcw,
   X,
   Check,
+  Filter,
+  BookOpen,
+  Library,
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import Navbar from "../components/Navbar";
@@ -17,12 +20,20 @@ interface Card {
   id: number;
   front: string;
   back: string;
+  learned?: boolean;
+  encountered?: boolean;
+}
+
+interface FilterSettings {
+  termSource: 'all' | 'encountered';
+  includeLearned: boolean;
 }
 
 const supabaseUrl = "https://myynwsmgvnrpekpzvhkp.supabase.co";
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseKey);
-const ELEVENLABS_VOICE_ID = "21m00Tcm4TlvDq8ikWAM";
+const ELEVENLABS_VOICE_ID_ENGLISH = "21m00Tcm4TlvDq8ikWAM";
+const ELEVENLABS_VOICE_ID_SPANISH = "ThT5KcBeYPX3keUQqHPh"; // Spanish voice
 
 const shuffleArray = <T,>(array: T[]): T[] => {
   const newArray = [...array];
@@ -46,6 +57,11 @@ export default function FlashcardGame(): React.ReactElement {
   const [loading, setLoading] = useState<boolean>(true);
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [apiKey, setApiKey] = useState<string>("");
+  const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [filterSettings, setFilterSettings] = useState<FilterSettings>({
+    termSource: 'all',
+    includeLearned: true,
+  });
 
   useEffect(() => {
     const keyFromEnv = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
@@ -53,41 +69,84 @@ export default function FlashcardGame(): React.ReactElement {
       setApiKey(keyFromEnv);
     }
 
-    const fetchAndSetCards = async () => {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("Data")
-        .select("id, phrase, translation");
-
-      if (error) {
-        console.error("Error fetching cards:", error);
-        setLoading(false);
-      } else if (data) {
-        const added = new Set<string>();
-        const formattedCards: Card[] = [];
-        for (const item of data) {
-          if (!added.has(item.phrase)) {
-            added.add(item.phrase);
-            formattedCards.push({
-              id: item.id,
-              front: item.phrase,
-              back: item.translation,
-            });
-          }
-        }
-        setSourceCards(formattedCards);
-        setCards(shuffleArray(formattedCards));
-        setLoading(false);
-      }
-    };
     fetchAndSetCards();
   }, []);
+
+  const fetchAndSetCards = async () => {
+    setLoading(true);
+    
+    // Get all terms
+    const { data: termsData, error: termsError } = await supabase
+      .from("Term")
+      .select("id, term, translation_spanish, learned");
+
+    if (termsError) {
+      console.error("Error fetching terms:", termsError);
+      setLoading(false);
+      return;
+    }
+
+    // Get encountered term IDs
+    const { data: encountersData, error: encountersError } = await supabase
+      .from("Encounter")
+      .select("term_id");
+
+    if (encountersError) {
+      console.error("Error fetching encounters:", encountersError);
+      setLoading(false);
+      return;
+    }
+
+    const encounteredTermIds = new Set(encountersData?.map(e => e.term_id) || []);
+
+    if (termsData) {
+      const formattedCards: Card[] = termsData.map((term) => ({
+        id: term.id,
+        front: term.term,
+        back: term.translation_spanish,
+        learned: term.learned || false,
+        encountered: encounteredTermIds.has(term.id),
+      }));
+
+      setSourceCards(formattedCards);
+      setLoading(false);
+    }
+  };
+
+  // Filter cards based on current settings
+  const filteredCards = useMemo(() => {
+    let filtered = [...sourceCards];
+
+    // Filter by term source (all vs encountered)
+    if (filterSettings.termSource === 'encountered') {
+      filtered = filtered.filter(card => card.encountered);
+    }
+
+    // Filter by learned status
+    if (!filterSettings.includeLearned) {
+      filtered = filtered.filter(card => !card.learned);
+    }
+
+    return filtered;
+  }, [sourceCards, filterSettings]);
+
+  // Update cards when filters change
+  useEffect(() => {
+    if (filteredCards.length > 0) {
+      setCards(shuffleArray(filteredCards));
+      setCurrentIndex(0);
+      setIsFlipped(false);
+      setSelectedAnswer(null);
+      setIsCorrect(null);
+    }
+  }, [filteredCards]);
 
   const currentCard = cards[currentIndex];
 
   const answerOptions = useMemo<string[]>(() => {
     if (!currentCard) return [];
     const correctAnswer = currentCard.back;
+    // Always use all source cards for answer options, not just filtered ones
     const wrongAnswers = sourceCards
       .filter((card) => card.id !== currentCard.id)
       .map((card) => card.back);
@@ -95,13 +154,16 @@ export default function FlashcardGame(): React.ReactElement {
     return shuffleArray([correctAnswer, ...shuffledWrongAnswers]);
   }, [currentIndex, cards, currentCard, sourceCards]);
 
-  const handleTextToSpeech = async (text: string) => {
+  const handleTextToSpeech = async (text: string, isSpanish: boolean = false) => {
     if (!text || isSpeaking || !apiKey) return;
     setIsSpeaking(true);
 
+    const voiceId = isSpanish ? ELEVENLABS_VOICE_ID_SPANISH : ELEVENLABS_VOICE_ID_ENGLISH;
+    const modelId = isSpanish ? "eleven_multilingual_v2" : "eleven_monolingual_v1";
+
     try {
       const response = await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
+        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
         {
           method: "POST",
           headers: {
@@ -110,7 +172,7 @@ export default function FlashcardGame(): React.ReactElement {
           },
           body: JSON.stringify({
             text: text,
-            model_id: "eleven_monolingual_v1",
+            model_id: modelId,
           }),
         }
       );
@@ -164,7 +226,7 @@ export default function FlashcardGame(): React.ReactElement {
   };
 
   const handleRestart = (): void => {
-    setCards(shuffleArray(sourceCards));
+    setCards(shuffleArray(filteredCards));
     setCurrentIndex(0);
     setIsFlipped(false);
     setSelectedAnswer(null);
@@ -185,6 +247,10 @@ export default function FlashcardGame(): React.ReactElement {
 
   const progress: number =
     cards.length > 0 ? ((currentIndex + 1) / cards.length) * 100 : 0;
+
+  const handleFilterChange = (newSettings: Partial<FilterSettings>) => {
+    setFilterSettings(prev => ({ ...prev, ...newSettings }));
+  };
 
   if (loading) {
     return (
@@ -245,8 +311,107 @@ export default function FlashcardGame(): React.ReactElement {
         className="flex flex-col items-center justify-center p-4"
         style={{ minHeight: "calc(100vh - 4rem)" }}
       >
+        {/* Settings Panel */}
+        {showSettings && (
+          <div className="fixed inset-0 flex items-center justify-center z-50" style={{backgroundColor: 'rgba(0, 0, 0, 0.4)'}}>
+            <div className="bg-white p-6 rounded-xl shadow-xl max-w-md w-full mx-4">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold text-gray-800">Filter Settings</h3>
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <div className="space-y-6">
+                {/* Term Source Filter */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700 mb-3">Term Source</h4>
+                  <div className="space-y-2">
+                    <label className="flex items-center space-x-3">
+                      <input
+                        type="radio"
+                        name="termSource"
+                        value="all"
+                        checked={filterSettings.termSource === 'all'}
+                        onChange={() => handleFilterChange({ termSource: 'all' })}
+                        className="text-blue-600"
+                      />
+                      <Library size={18} className="text-gray-500" />
+                      <span>All Terms ({sourceCards.length})</span>
+                    </label>
+                    <label className="flex items-center space-x-3">
+                      <input
+                        type="radio"
+                        name="termSource"
+                        value="encountered"
+                        checked={filterSettings.termSource === 'encountered'}
+                        onChange={() => handleFilterChange({ termSource: 'encountered' })}
+                        className="text-blue-600"
+                      />
+                      <BookOpen size={18} className="text-gray-500" />
+                      <span>My Terms ({sourceCards.filter(c => c.encountered).length})</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Learned Terms Filter */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700 mb-3">Learned Terms</h4>
+                  <label className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      checked={filterSettings.includeLearned}
+                      onChange={(e) => handleFilterChange({ includeLearned: e.target.checked })}
+                      className="text-blue-600"
+                    />
+                    <span>Include learned terms</span>
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {filterSettings.includeLearned 
+                      ? "All terms will be included" 
+                      : "Only terms marked as not learned will be shown"}
+                  </p>
+                </div>
+
+                {/* Results Summary */}
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-sm text-gray-600">
+                    <strong>{filteredCards.length}</strong> terms match your current filters
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Apply Filters
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {cards.length > 0 && currentCard ? (
           <div className="w-full max-w-2xl">
+            {/* Filter indicator */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-2 text-sm text-gray-600">
+                <Filter size={16} />
+                <span>
+                  {filterSettings.termSource === 'all' ? 'All Terms' : 'My Terms'}
+                  {!filterSettings.includeLearned && ' (Unlearned only)'}
+                </span>
+              </div>
+              <span className="text-xs text-gray-500">
+                {filteredCards.length} terms available
+              </span>
+            </div>
+
             <div className="flex items-center justify-between mb-4">
               <div className="w-full bg-gray-200 rounded-full h-2.5 mr-4">
                 <div
@@ -269,7 +434,7 @@ export default function FlashcardGame(): React.ReactElement {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleTextToSpeech(currentCard.front);
+                      handleTextToSpeech(currentCard.front, false); // English
                     }}
                     disabled={isSpeaking}
                     className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 disabled:text-gray-200"
@@ -279,12 +444,25 @@ export default function FlashcardGame(): React.ReactElement {
                   <p className="text-4xl font-bold text-center">
                     {currentCard.front}
                   </p>
+                  {/* Show indicators */}
+                  <div className="absolute bottom-4 left-4 flex space-x-2">
+                    {currentCard.learned && (
+                      <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs">
+                        Learned
+                      </span>
+                    )}
+                    {currentCard.encountered && (
+                      <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs">
+                        Encountered
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="absolute w-full h-full backface-hidden bg-white flex flex-col items-center justify-center p-6 rounded-xl border rotate-y-180">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleTextToSpeech(currentCard.back);
+                      handleTextToSpeech(currentCard.back, true); // Spanish
                     }}
                     disabled={isSpeaking}
                     className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 disabled:text-gray-200"
@@ -320,7 +498,10 @@ export default function FlashcardGame(): React.ReactElement {
               ))}
             </div>
             <div className="flex items-center justify-between mt-8">
-              <button className="text-gray-400 hover:text-gray-600">
+              <button 
+                onClick={() => setShowSettings(true)}
+                className="text-gray-400 hover:text-gray-600"
+              >
                 <Settings size={24} />
               </button>
               <div className="flex items-center space-x-4">
@@ -342,18 +523,24 @@ export default function FlashcardGame(): React.ReactElement {
                 onClick={handleRestart}
                 className="text-gray-400 hover:text-gray-600"
               >
-                <Shuffle size={24} />
+                <RefreshCcw size={24} />
               </button>
             </div>
           </div>
         ) : (
           <div className="text-center">
             <h2 className="text-2xl font-semibold text-gray-700">
-              No phrases found.
+              No terms match your current filters.
             </h2>
-            <p className="text-gray-500 mt-2">
-              Please add some phrases to your database to start playing.
+            <p className="text-gray-500 mt-2 mb-4">
+              Try adjusting your filter settings to see more terms.
             </p>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Adjust Filters
+            </button>
           </div>
         )}
       </div>

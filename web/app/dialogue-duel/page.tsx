@@ -1,13 +1,23 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { SendHorizonal, User, Bot, AlertTriangle, KeyRound, Loader2, BookOpenCheck } from 'lucide-react';
+import { SendHorizonal, User, Bot, AlertTriangle, KeyRound, Loader2, BookOpenCheck, Settings, X, Filter, BookOpen, Library, SkipForward } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js'
 import Navbar from '../components/Navbar';
 
 interface Message { sender: 'user' | 'ai'; text: string; }
-interface Phrase { id: number; phrase: string; }
+interface Phrase { 
+    id: number; 
+    phrase: string; 
+    learned?: boolean;
+    encountered?: boolean;
+}
 interface PhraseProgress { phrase_id: number; srs_level: number; }
+
+interface FilterSettings {
+    termSource: 'all' | 'encountered';
+    includeLearned: boolean;
+}
 
 const supabaseUrl = 'https://myynwsmgvnrpekpzvhkp.supabase.co';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_KEY || '';
@@ -69,7 +79,69 @@ export default function DialogueDuelPage(): React.ReactElement {
     const [isGameWon, setIsGameWon] = useState(false);
     const [isGameLoading, setIsGameLoading] = useState(true);
     const [gameError, setGameError] = useState<string | null>(null);
+    const [showSettings, setShowSettings] = useState<boolean>(false);
+    const [allPhrases, setAllPhrases] = useState<Phrase[]>([]);
+    const [filterSettings, setFilterSettings] = useState<FilterSettings>({
+        termSource: 'all',
+        includeLearned: true,
+    });
+    const [tempFilterSettings, setTempFilterSettings] = useState<FilterSettings>({
+        termSource: 'all',
+        includeLearned: true,
+    });
     const chatEndRef = useRef<HTMLDivElement>(null);
+
+    const fetchAllPhrases = async () => {
+        try {
+            // Get all terms
+            const { data: termsData, error: termsError } = await supabase
+                .from("Term")
+                .select("id, term, learned");
+
+            if (termsError) throw termsError;
+
+            // Get encountered term IDs
+            const { data: encountersData, error: encountersError } = await supabase
+                .from("Encounter")
+                .select("term_id");
+
+            if (encountersError) throw encountersError;
+
+            const encounteredTermIds = new Set(encountersData?.map(e => e.term_id) || []);
+
+            if (termsData) {
+                const formattedPhrases: Phrase[] = termsData.map((term) => ({
+                    id: term.id,
+                    phrase: term.term,
+                    learned: term.learned || false,
+                    encountered: encounteredTermIds.has(term.id),
+                }));
+
+                setAllPhrases(formattedPhrases);
+                return formattedPhrases;
+            }
+            return [];
+        } catch (error) {
+            console.error("Error fetching phrases:", error);
+            throw error;
+        }
+    };
+
+    const getFilteredPhrases = (phrases: Phrase[]) => {
+        let filtered = [...phrases];
+
+        // Filter by term source (all vs encountered)
+        if (filterSettings.termSource === 'encountered') {
+            filtered = filtered.filter(phrase => phrase.encountered);
+        }
+
+        // Filter by learned status
+        if (!filterSettings.includeLearned) {
+            filtered = filtered.filter(phrase => !phrase.learned);
+        }
+
+        return filtered;
+    };
     
     const fetchNewPhraseAndStart = async () => {
         setIsGameLoading(true);
@@ -78,16 +150,23 @@ export default function DialogueDuelPage(): React.ReactElement {
         setTargetPhrase(null);
 
         try {
-            const { data: allPhrases, error: phrasesError } = await supabase.from('Data').select('id, phrase');
-            if (phrasesError) throw phrasesError;
+            const phrases = await fetchAllPhrases();
 
-            if (!allPhrases || allPhrases.length === 0) {
+            if (!phrases || phrases.length === 0) {
                 setGameError("No phrases found. Please add phrases to your collection to start playing.");
                 setIsGameLoading(false);
                 return;
             }
 
-            const phraseToPractice = allPhrases[Math.floor(Math.random() * allPhrases.length)];
+            const filteredPhrases = getFilteredPhrases(phrases);
+
+            if (filteredPhrases.length === 0) {
+                setGameError("No phrases match your current filters. Please adjust your settings.");
+                setIsGameLoading(false);
+                return;
+            }
+
+            const phraseToPractice = filteredPhrases[Math.floor(Math.random() * filteredPhrases.length)];
 
             if (phraseToPractice) {
                 setTargetPhrase(phraseToPractice);
@@ -111,6 +190,13 @@ export default function DialogueDuelPage(): React.ReactElement {
             setIsGameLoading(false);
         }
     }, []);
+
+    // Restart game when filter settings change
+    useEffect(() => {
+        if (allPhrases.length > 0) {
+            handleRestart();
+        }
+    }, [filterSettings]);
 
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -145,6 +231,22 @@ export default function DialogueDuelPage(): React.ReactElement {
         setUserInput('');
         fetchNewPhraseAndStart();
     };
+
+    const handleFilterChange = (newSettings: Partial<FilterSettings>) => {
+        setTempFilterSettings(prev => ({ ...prev, ...newSettings }));
+    };
+
+    const applyFilters = () => {
+        setFilterSettings(tempFilterSettings);
+        setShowSettings(false);
+    };
+
+    const openSettings = () => {
+        setTempFilterSettings(filterSettings);
+        setShowSettings(true);
+    };
+
+    const filteredPhrases = getFilteredPhrases(allPhrases);
     
     if (!GEMINI_API_KEY || GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY_HERE') {
         return (
@@ -178,18 +280,168 @@ export default function DialogueDuelPage(): React.ReactElement {
     return (
         <div className="flex flex-col h-screen bg-gray-50 font-sans">
             <Navbar />
+
+            {/* Settings Panel */}
+            {showSettings && (
+                <div className="fixed inset-0 flex items-center justify-center z-50" style={{backgroundColor: 'rgba(0, 0, 0, 0.3)'}}>
+                    <div className="bg-white p-6 rounded-xl shadow-xl max-w-md w-full mx-4">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-bold text-gray-900">Filter Settings</h3>
+                            <button
+                                onClick={() => setShowSettings(false)}
+                                className="text-gray-600 hover:text-gray-800"
+                            >
+                                <X size={24} />
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-6">
+                            {/* Term Source Filter */}
+                            <div>
+                                <h4 className="text-sm font-semibold text-gray-900 mb-3">Term Source</h4>
+                                <div className="space-y-2">
+                                    <label className="flex items-center space-x-3">
+                                        <input
+                                            type="radio"
+                                            name="termSource"
+                                            value="all"
+                                            checked={tempFilterSettings.termSource === 'all'}
+                                            onChange={() => handleFilterChange({ termSource: 'all' })}
+                                            className="text-blue-600"
+                                        />
+                                        <Library size={18} className="text-gray-600" />
+                                        <span className="text-gray-900">All Terms ({allPhrases.length})</span>
+                                    </label>
+                                    <label className="flex items-center space-x-3">
+                                        <input
+                                            type="radio"
+                                            name="termSource"
+                                            value="encountered"
+                                            checked={tempFilterSettings.termSource === 'encountered'}
+                                            onChange={() => handleFilterChange({ termSource: 'encountered' })}
+                                            className="text-blue-600"
+                                        />
+                                        <BookOpen size={18} className="text-gray-600" />
+                                        <span className="text-gray-900">My Terms ({allPhrases.filter(p => p.encountered).length})</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            {/* Learned Terms Filter */}
+                            <div>
+                                <h4 className="text-sm font-semibold text-gray-900 mb-3">Learned Terms</h4>
+                                <label className="flex items-center space-x-3">
+                                    <input
+                                        type="checkbox"
+                                        checked={tempFilterSettings.includeLearned}
+                                        onChange={(e) => handleFilterChange({ includeLearned: e.target.checked })}
+                                        className="text-blue-600"
+                                    />
+                                    <span className="text-gray-900">Include learned terms</span>
+                                </label>
+                                <p className="text-xs text-gray-600 mt-1">
+                                    {tempFilterSettings.includeLearned 
+                                        ? "All terms will be included" 
+                                        : "Only terms marked as not learned will be shown"}
+                                </p>
+                            </div>
+
+                            {/* Results Summary */}
+                            <div className="bg-gray-50 p-3 rounded-lg">
+                                <p className="text-sm text-gray-800">
+                                    <strong>{getFilteredPhrases(allPhrases.map(p => ({ ...p, learned: p.learned || false, encountered: p.encountered || false }))).filter(p => {
+                                        if (tempFilterSettings.termSource === 'encountered' && !p.encountered) return false;
+                                        if (!tempFilterSettings.includeLearned && p.learned) return false;
+                                        return true;
+                                    }).length}</strong> terms will match these filters
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="mt-6 flex justify-end space-x-3">
+                            <button
+                                onClick={() => setShowSettings(false)}
+                                className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={applyFilters}
+                                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                            >
+                                Apply Filters
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <main className="flex-1 flex flex-col p-4 overflow-hidden">
                 <div className="w-full max-w-2xl mx-auto flex-1 flex flex-col rounded-xl shadow-sm border border-gray-200 overflow-hidden bg-white">
                     <div className="p-4 border-b border-gray-200">
-                        <h1 className="text-xl font-bold text-black">Dialogue Duel</h1>
+                        <div className="flex items-center justify-between mb-2">
+                            <h1 className="text-xl font-bold text-black">Dialogue Duel</h1>
+                            <div className="flex items-center space-x-2">
+                                <button 
+                                    onClick={openSettings}
+                                    className="text-gray-400 hover:text-gray-600 p-1"
+                                    title="Filter settings"
+                                >
+                                    <Settings size={20} />
+                                </button>
+                                <button 
+                                    onClick={handleRestart}
+                                    className="text-gray-400 hover:text-gray-600 p-1"
+                                    title="Skip to next term"
+                                >
+                                    <SkipForward size={20} />
+                                </button>
+                            </div>
+                        </div>
+                        
+                        {/* Filter indicator */}
+                        <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+                            <div className="flex items-center space-x-2">
+                                <Filter size={12} />
+                                <span>
+                                    {filterSettings.termSource === 'all' ? 'All Terms' : 'My Terms'}
+                                    {!filterSettings.includeLearned && ' (Unlearned only)'}
+                                </span>
+                            </div>
+                            <span>{filteredPhrases.length} terms available</span>
+                        </div>
+                        
                         <p className="text-sm text-black mt-1">Your Goal: Use the phrase below naturally in the conversation.</p>
                         <div className="mt-3 bg-blue-50 text-blue-800 p-3 rounded-lg text-center">
                             <span className="font-semibold text-lg">"{targetPhrase?.phrase}"</span>
+                            {/* Show indicators */}
+                            <div className="flex justify-center space-x-2 mt-2">
+                                {targetPhrase?.learned && (
+                                    <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs">
+                                        Learned
+                                    </span>
+                                )}
+                                {targetPhrase?.encountered && (
+                                    <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs">
+                                        Encountered
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </div>
                     <div className="flex-1 p-4 overflow-y-auto">
                          {gameError ? (
-                            <div className="text-center text-red-600">{gameError}</div>
+                            <div className="text-center">
+                                <div className="text-red-600 mb-4">{gameError}</div>
+                                {gameError.includes("filters") && (
+                                    <button
+                                        onClick={() => setShowSettings(true)}
+                                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                                    >
+                                        Adjust Filters
+                                    </button>
+                                )}
+                            </div>
                          ) : (
                             <div className="space-y-4">
                                 {messages.map((msg, index) => (
