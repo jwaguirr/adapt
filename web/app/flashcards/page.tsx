@@ -14,6 +14,7 @@ interface Card {
 const supabaseUrl = 'https://myynwsmgvnrpekpzvhkp.supabase.co';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
+const ELEVENLABS_VOICE_ID = '21m00Tcm4TlvDq8ikWAM';
 
 const shuffleArray = <T,>(array: T[]): T[] => {
     const newArray = [...array];
@@ -35,11 +36,18 @@ export default function FlashcardGame(): React.ReactElement {
     const [incorrectCount, setIncorrectCount] = useState<number>(0);
     const [showSummary, setShowSummary] = useState<boolean>(false);
     const [loading, setLoading] = useState<boolean>(true);
+    const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
+    const [apiKey, setApiKey] = useState<string>('');
 
     useEffect(() => {
+        const keyFromEnv = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
+        if (keyFromEnv) {
+            setApiKey(keyFromEnv);
+        }
+
         const fetchAndSetCards = async () => {
             setLoading(true);
-            const { data, error } = await supabase.from('Data').select('id, phrase, context');
+            const { data, error } = await supabase.from('Data').select('id, phrase, translation');
 
             if (error) {
                 console.error('Error fetching cards:', error);
@@ -48,14 +56,13 @@ export default function FlashcardGame(): React.ReactElement {
                 const formattedCards: Card[] = data.map(item => ({
                     id: item.id,
                     front: item.phrase,
-                    back: item.context,
+                    back: item.translation,
                 }));
                 setSourceCards(formattedCards);
                 setCards(shuffleArray(formattedCards));
                 setLoading(false);
             }
         };
-
         fetchAndSetCards();
     }, []);
 
@@ -70,6 +77,37 @@ export default function FlashcardGame(): React.ReactElement {
         const shuffledWrongAnswers = shuffleArray(wrongAnswers).slice(0, 3);
         return shuffleArray([correctAnswer, ...shuffledWrongAnswers]);
     }, [currentIndex, cards, currentCard, sourceCards]);
+
+    const handleTextToSpeech = async (text: string) => {
+        if (!text || isSpeaking || !apiKey) return;
+        setIsSpeaking(true);
+
+        try {
+            const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'xi-api-key': apiKey,
+                },
+                body: JSON.stringify({
+                    text: text,
+                    model_id: 'eleven_monolingual_v1',
+                }),
+            });
+
+            if (!response.ok) throw new Error(`ElevenLabs TTS Error: ${await response.text()}`);
+
+            const audioBlob = await response.blob();
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+            audio.play();
+            audio.onended = () => setIsSpeaking(false);
+        } catch (error) {
+                console.error("Error with ElevenLabs TTS:", error);
+                alert("Sorry, the audio couldn't be generated.");
+                setIsSpeaking(false);
+        }
+    };
 
     const handleNext = (): void => {
         setIsFlipped(false);
@@ -165,8 +203,26 @@ export default function FlashcardGame(): React.ReactElement {
                         </div>
                         <div className="relative perspective-1000">
                             <div className={`w-full h-64 transition-transform duration-700 transform-style-preserve-3d rounded-xl shadow-lg cursor-pointer ${isFlipped ? 'rotate-y-180' : ''}`} onClick={() => setIsFlipped(!isFlipped)}>
-                                <div className="absolute w-full h-full backface-hidden bg-white flex flex-col items-center justify-center p-6 rounded-xl border"><button className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><Volume2 size={24} /></button><p className="text-4xl font-bold text-center">{currentCard.front}</p></div>
-                                <div className="absolute w-full h-full backface-hidden bg-white flex flex-col items-center justify-center p-6 rounded-xl border rotate-y-180"><button className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><Volume2 size={24} /></button><p className="text-2xl font-medium text-blue-600 text-center leading-relaxed">{currentCard.back}</p></div>
+                                <div className="absolute w-full h-full backface-hidden bg-white flex flex-col items-center justify-center p-6 rounded-xl border">
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handleTextToSpeech(currentCard.front); }}
+                                        disabled={isSpeaking}
+                                        className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 disabled:text-gray-200"
+                                    >
+                                        <Volume2 size={24} />
+                                    </button>
+                                    <p className="text-4xl font-bold text-center">{currentCard.front}</p>
+                                </div>
+                                <div className="absolute w-full h-full backface-hidden bg-white flex flex-col items-center justify-center p-6 rounded-xl border rotate-y-180">
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handleTextToSpeech(currentCard.back); }}
+                                        disabled={isSpeaking}
+                                        className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 disabled:text-gray-200"
+                                    >
+                                        <Volume2 size={24} />
+                                    </button>
+                                    <p className="text-2xl font-medium text-blue-600 text-center leading-relaxed">{currentCard.back}</p>
+                                </div>
                             </div>
                         </div>
                         <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -202,4 +258,3 @@ export default function FlashcardGame(): React.ReactElement {
         </div>
     );
 }
-

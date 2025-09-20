@@ -38,6 +38,18 @@ export default function Navbar(): React.ReactElement {
                         >
                             Flashcards
                         </a>
+                        <a 
+                            href="/dialogue-duel" 
+                            className={getLinkClass(['/dialogue-duel'])}
+                        >
+                            Dialogue Duel
+                        </a>
+                        <a 
+                            href="/second-chance" 
+                            className={getLinkClass(['/second-chance'])}
+                        >
+                            Second Chance
+                        </a>
                     </div>
                 </div>
             </div>
