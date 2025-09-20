@@ -28,9 +28,9 @@ export default function Navbar(): React.ReactElement {
                     <div className="flex items-center space-x-2">
                         <a 
                             href="/dashboard" 
-                            className={getLinkClass(['/', '/dashboard'])}
+                            className={getLinkClass(['/dashboard'])}
                         >
-                            Phrases
+                            Dashboard
                         </a>
                         <a 
                             href="/flashcards" 
