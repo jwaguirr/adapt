@@ -468,30 +468,6 @@ export default function SecondChanceGame(): React.ReactElement {
             setIsGeneratingFinalCut(false);
         }
     };
-
-    if (!apiKey || !process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
-        return (
-            <div className="flex flex-col min-h-screen bg-gray-50 font-sans">
-                <Navbar />
-                <main className="flex-1 flex items-center justify-center p-4">
-                    <div className="text-center bg-white p-8 rounded-lg shadow-md max-w-lg">
-                        <AlertTriangle className="mx-auto h-12 w-12 text-yellow-500" />
-                        <h2 className="mt-4 text-2xl font-bold text-black">API Keys Required</h2>
-                        <p className="mt-2 text-gray-900">
-                           You need both ElevenLabs and Gemini API keys. Please add them to your <code className="bg-gray-200 text-sm font-mono p-1 rounded">.env.local</code> file as:
-                        </p>
-                        <pre className="mt-4 p-3 bg-gray-100 rounded-md text-left text-sm text-gray-900">
-                           NEXT_PUBLIC_ELEVENLABS_API_KEY=your_elevenlabs_key_here
-                           NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_key_here
-                        </pre>
-                        <p className="mt-4 text-sm text-gray-700">
-                           After adding the keys, you'll need to restart your development server.
-                        </p>
-                    </div>
-                </main>
-            </div>
-        );
-    }
     
     const renderGameState = () => {
         switch (gameState) {
