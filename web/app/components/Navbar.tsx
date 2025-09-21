@@ -33,6 +33,12 @@ export default function Navbar(): React.ReactElement {
                             Dashboard
                         </a>
                         <a 
+                            href="/analytics" 
+                            className={getLinkClass(['/analytics'])}
+                        >
+                            Analytics
+                        </a>
+                        <a 
                             href="/flashcards" 
                             className={getLinkClass(['/flashcards'])}
                         >
