@@ -51,10 +51,10 @@ export default function Navbar(): React.ReactElement {
                             Dialogue Duel
                         </a>
                         <a 
-                            href="/second-chance" 
-                            className={getLinkClass(['/second-chance'])}
+                            href="/replay-conversation" 
+                            className={getLinkClass(['/replay-conversation'])}
                         >
-                            Second Chance
+                            Conversation Replay
                         </a>
                     </div>
                 </div>
