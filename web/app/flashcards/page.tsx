@@ -403,7 +403,7 @@ export default function FlashcardGame(): React.ReactElement {
               <div className="flex items-center space-x-2 text-sm text-gray-600">
                 <Filter size={16} />
                 <span>
-                  {filterSettings.termSource === 'all' ? 'All Terms' : 'My Terms'}
+                  {filterSettings.termSource === 'all' ? 'All Terms' : 'Encountered Terms'}
                   {!filterSettings.includeLearned && ' (Unlearned only)'}
                 </span>
               </div>

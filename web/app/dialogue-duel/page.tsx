@@ -309,4 +309,194 @@ export default function DialogueDuelPage(): React.ReactElement {
                                             onChange={() => handleFilterChange({ termSource: 'all' })}
                                             className="text-blue-600"
                                         />
-                                        <Library siz
+                                        <Library size={18} className="text-gray-600" />
+                                        <span className="text-gray-900">All Terms ({allPhrases.length})</span>
+                                    </label>
+                                    <label className="flex items-center space-x-3">
+                                        <input
+                                            type="radio"
+                                            name="termSource"
+                                            value="encountered"
+                                            checked={tempFilterSettings.termSource === 'encountered'}
+                                            onChange={() => handleFilterChange({ termSource: 'encountered' })}
+                                            className="text-blue-600"
+                                        />
+                                        <BookOpen size={18} className="text-gray-600" />
+                                        <span className="text-gray-900">Encountered Terms ({allPhrases.filter(p => p.encountered).length})</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            {/* Learned Terms Filter */}
+                            <div>
+                                <h4 className="text-sm font-semibold text-gray-900 mb-3">Learned Terms</h4>
+                                <label className="flex items-center space-x-3">
+                                    <input
+                                        type="checkbox"
+                                        checked={tempFilterSettings.includeLearned}
+                                        onChange={(e) => handleFilterChange({ includeLearned: e.target.checked })}
+                                        className="text-blue-600"
+                                    />
+                                    <span className="text-gray-900">Include learned terms</span>
+                                </label>
+                                <p className="text-xs text-gray-600 mt-1">
+                                    {tempFilterSettings.includeLearned 
+                                        ? "All terms will be included" 
+                                        : "Only terms marked as not learned will be shown"}
+                                </p>
+                            </div>
+
+                            {/* Results Summary */}
+                            <div className="bg-gray-50 p-3 rounded-lg">
+                                <p className="text-sm text-gray-800">
+                                    <strong>{getFilteredPhrases(allPhrases.map(p => ({ ...p, learned: p.learned || false, encountered: p.encountered || false }))).filter(p => {
+                                        if (tempFilterSettings.termSource === 'encountered' && !p.encountered) return false;
+                                        if (!tempFilterSettings.includeLearned && p.learned) return false;
+                                        return true;
+                                    }).length}</strong> terms will match these filters
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="mt-6 flex justify-end space-x-3">
+                            <button
+                                onClick={() => setShowSettings(false)}
+                                className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={applyFilters}
+                                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                            >
+                                Apply Filters
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <main className="flex-1 flex flex-col p-4 overflow-hidden">
+                <div className="w-full max-w-2xl mx-auto flex-1 flex flex-col rounded-xl shadow-sm border border-gray-200 overflow-hidden bg-white">
+                    <div className="p-4 border-b border-gray-200">
+                        <div className="flex items-center justify-between mb-2">
+                            <h1 className="text-xl font-bold text-black">Dialogue Duel</h1>
+                            <div className="flex items-center space-x-2">
+                                <button 
+                                    onClick={openSettings}
+                                    className="text-gray-400 hover:text-gray-600 p-1"
+                                    title="Filter settings"
+                                >
+                                    <Settings size={20} />
+                                </button>
+                                <button 
+                                    onClick={handleRestart}
+                                    className="text-gray-400 hover:text-gray-600 p-1"
+                                    title="Skip to next term"
+                                >
+                                    <SkipForward size={20} />
+                                </button>
+                            </div>
+                        </div>
+                        
+                        {/* Filter indicator */}
+                        <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+                            <div className="flex items-center space-x-2">
+                                <Filter size={12} />
+                                <span>
+                                    {filterSettings.termSource === 'all' ? 'All Terms' : 'Encountered Terms'}
+                                    {!filterSettings.includeLearned && ' (Unlearned only)'}
+                                </span>
+                            </div>
+                            <span>{filteredPhrases.length} terms available</span>
+                        </div>
+                        
+                        <p className="text-sm text-black mt-1">Your Goal: Use the phrase below naturally in the conversation.</p>
+                        <div className="mt-3 bg-blue-50 text-blue-800 p-3 rounded-lg text-center">
+                            <span className="font-semibold text-lg">"{targetPhrase?.phrase}"</span>
+                            {/* Show indicators */}
+                            <div className="flex justify-center space-x-2 mt-2">
+                                {targetPhrase?.learned && (
+                                    <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs">
+                                        Learned
+                                    </span>
+                                )}
+                                {targetPhrase?.encountered && (
+                                    <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs">
+                                        Encountered
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex-1 p-4 overflow-y-auto">
+                         {gameError ? (
+                            <div className="text-center">
+                                <div className="text-red-600 mb-4">{gameError}</div>
+                                {gameError.includes("filters") && (
+                                    <button
+                                        onClick={() => setShowSettings(true)}
+                                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                                    >
+                                        Adjust Filters
+                                    </button>
+                                )}
+                            </div>
+                         ) : (
+                            <div className="space-y-4">
+                                {messages.map((msg, index) => (
+                                    <div key={index} className={`flex items-start gap-3 ${msg.sender === 'user' ? 'justify-end' : ''}`}>
+                                        {msg.sender === 'ai' && <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center"><Bot className="w-5 h-5 text-gray-600" /></div>}
+                                        <div className={`max-w-xs md:max-w-md p-3 rounded-xl ${msg.sender === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}>
+                                            <p className="text-sm leading-relaxed">{msg.text}</p>
+                                        </div>
+                                         {msg.sender === 'user' && <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center"><User className="w-5 h-5 text-gray-600" /></div>}
+                                    </div>
+                                ))}
+                                {isLoading && (
+                                    <div className="flex items-start gap-3">
+                                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center"><Bot className="w-5 h-5 text-gray-600" /></div>
+                                        <div className="max-w-xs md:max-w-md p-3 rounded-xl bg-gray-100">
+                                            <div className="flex items-center space-x-1">
+                                                <span className="h-2 w-2 bg-gray-400 rounded-full animate-bounce"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                 <div ref={chatEndRef} />
+                            </div>
+                         )}
+                    </div>
+                    <div className="p-4 border-t border-gray-200">
+                        {isGameWon ? (
+                             <div className="text-center">
+                                <p className="text-green-600 font-semibold mb-3">🎉 Success! You used the phrase perfectly.</p>
+                                <button onClick={handleRestart} className="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700">
+                                    Play Again
+                                </button>
+                            </div>
+                        ) : (
+                            <form onSubmit={handleSendMessage} className="flex items-center space-x-3">
+                                <input
+                                    type="text"
+                                    value={userInput}
+                                    onChange={(e) => setUserInput(e.target.value)}
+                                    placeholder="Type your response..."
+                                    className="flex-1 w-full px-4 py-2 text-black rounded-full border border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                                    disabled={isLoading}
+                                />
+                                <button
+                                    type="submit"
+                                    className="p-3 rounded-full bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed transition-colors"
+                                    disabled={isLoading || !userInput.trim()}
+                                >
+                                    <SendHorizonal size={20} />
+                                </button>
+                            </form>
+                        )}
+                    </div>
+                </div>
+            </main>
+        </div>
+    );
+}
