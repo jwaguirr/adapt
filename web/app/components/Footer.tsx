@@ -94,7 +94,7 @@ export default function Footer() {
         {/* Bottom Section */}
         <div className="border-t border-stone-700 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
           <p className="text-stone-400 text-sm">
-            © 2024 Adapt. All rights reserved.
+            © 2025 Adapt. All rights reserved.
           </p>
           <div className="flex space-x-6 mt-4 md:mt-0">
             <a href="#" className="text-stone-400 hover:text-white text-sm transition-colors">
