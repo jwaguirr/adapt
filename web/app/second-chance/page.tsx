@@ -9,21 +9,14 @@ const supabaseUrl = 'https://myynwsmgvnrpekpzvhkp.supabase.co';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-type GameState = 'LOADING' | 'TIMELINE' | 'REPLAY' | 'PHRASE_BUILDER' | 'REHEARSAL' | 'PERFORMANCE' | 'FINAL_CUT' | 'FEEDBACK';
-type WordBlock = { id: number; text: string; category: string; };
+type GameState = 'LOADING' | 'TIMELINE' | 'REPLAY' | 'INPUT' | 'REHEARSAL' | 'PERFORMANCE' | 'FINAL_CUT' | 'FEEDBACK';
 type Conversation = { speaker: string; text: string; }[];
-type PhraseBlocks = WordBlock[]; // Updated to be a single array
 type TimelineEvent = {
     id: number;
     time: string;
     description: string;
     originalPhrase: string;
     context: Conversation;
-    phraseBlocks: PhraseBlocks;
-    feedback: {
-        excellent: string;
-        interesting: string;
-    };
 };
 
 const TimelineView = ({ onSelectEvent, timelineData }: { onSelectEvent: (event: TimelineEvent) => void; timelineData: TimelineEvent[] }) => {
@@ -36,9 +29,7 @@ const TimelineView = ({ onSelectEvent, timelineData }: { onSelectEvent: (event: 
                     timelineData.map((event) => (
                         <div
                             key={event.id}
-                            onClick={() => {
-                                onSelectEvent(event);
-                            }}
+                            onClick={() => onSelectEvent(event)}
                             className="flex items-center p-4 bg-white rounded-lg shadow-md border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors"
                         >
                             <div className="flex-shrink-0 w-24 text-sm font-semibold text-blue-600">
@@ -61,38 +52,27 @@ const TimelineView = ({ onSelectEvent, timelineData }: { onSelectEvent: (event: 
     );
 };
 
-const PhraseBuilderView = ({
-    selectedEvent,
-    builtPhrase,
-    handleAddToPhrase,
-    handleResetPhrase,
-    onLockInPhrase,
+// UPDATED InputView component
+const InputView = ({
+    context,
+    onPhraseSubmit,
     onBackToTimeline
 }: {
-    selectedEvent: TimelineEvent;
-    builtPhrase: WordBlock[];
-    handleAddToPhrase: (block: WordBlock) => void;
-    handleResetPhrase: () => void;
-    onLockInPhrase: () => void;
+    context: Conversation;
+    onPhraseSubmit: (newPhrase: string) => void;
     onBackToTimeline: () => void;
 }) => {
-    const constructedText = builtPhrase.map(b => b.text).join(' ');
-    const isPhraseComplete = builtPhrase.length > 0;
+    const [userInput, setUserInput] = useState('');
 
-    const renderBlockButtons = (blocks: WordBlock[]) => (
-        <div className="flex flex-wrap gap-2 justify-center">
-            {blocks.map(block => (
-                <button
-                    key={block.id}
-                    onClick={() => handleAddToPhrase(block)}
-                    className="bg-white border-2 border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-200 disabled:opacity-50 text-black"
-                    disabled={builtPhrase.some(b => b.id === block.id)}
-                >
-                    {block.text}
-                </button>
-            ))}
-        </div>
-    );
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (userInput.trim()) {
+            onPhraseSubmit(userInput.trim());
+        }
+    };
+
+    // Omit the user's original line from the context display
+    const contextToShow = context.filter(line => line.speaker !== 'You');
 
     return (
         <div>
@@ -100,31 +80,47 @@ const PhraseBuilderView = ({
                 <button onClick={onBackToTimeline} className="text-gray-600 hover:underline flex items-center">
                     <ArrowLeft size={16} className="mr-1" /> Back
                 </button>
-                <h2 className="text-2xl font-bold text-center text-black flex-1">The Phrase-Builder</h2>
-                <div className="w-12"></div>
+                <h2 className="text-2xl font-bold text-center text-black flex-1">Your Second Chance</h2>
+                <div className="w-20"></div> {/* Spacer */}
             </div>
             
-            <p className="text-center text-gray-900 mb-6">Click the blocks in the correct order to form a new phrase.</p>
-            <div className="bg-gray-100 p-4 rounded-lg min-h-[6rem] mb-4 text-center flex items-center justify-center">
-                <p className="text-2xl font-semibold text-black">{constructedText || "Your new phrase will appear here..."}</p>
+            <div className="bg-gray-100 p-4 rounded-lg text-left space-y-2 mb-6 text-gray-900">
+                {contextToShow.map((line, index) => (
+                    <p key={index}>
+                        <span className="font-bold">{line.speaker}:</span> {line.text}
+                    </p>
+                ))}
             </div>
             
-            <h3 className="text-lg font-semibold text-black mt-6 mb-2">Phrase Blocks</h3>
-            {renderBlockButtons(selectedEvent.phraseBlocks)}
+            <p className="text-center text-gray-900 mb-4">What should you have said here?</p>
             
-            <div className="flex justify-center gap-4 mt-8">
-                <button onClick={handleResetPhrase} className="bg-gray-200 font-semibold py-2 px-6 rounded-lg text-black">Reset</button>
-                <button onClick={onLockInPhrase} className="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg disabled:bg-blue-300" disabled={!isPhraseComplete}>Lock In Phrase</button>
-            </div>
+            <form onSubmit={handleSubmit} className="flex flex-col items-center gap-4">
+                <input
+                    type="text"
+                    value={userInput}
+                    onChange={(e) => setUserInput(e.target.value)}
+                    placeholder="Type your new phrase here..."
+                    className="w-full max-w-md px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    autoFocus
+                />
+                <button 
+                    type="submit" 
+                    className="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg disabled:bg-blue-300"
+                    disabled={!userInput.trim()}
+                >
+                    Lock In Phrase
+                </button>
+            </form>
         </div>
     );
 };
+
 
 export default function SecondChanceGame(): React.ReactElement {
     const [timelineData, setTimelineData] = useState<TimelineEvent[]>([]);
     const [gameState, setGameState] = useState<GameState>('LOADING');
     const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(null);
-    const [builtPhrase, setBuiltPhrase] = useState<WordBlock[]>([]);
+    const [userTypedPhrase, setUserTypedPhrase] = useState(''); // New state for user input
     const [isRehearsing, setIsRehearsing] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
     const [userAudio, setUserAudio] = useState<string | null>(null);
@@ -141,28 +137,18 @@ export default function SecondChanceGame(): React.ReactElement {
     ): Promise<string> => {
         const prompt = `
         You are an AI language coach named "Gemini Coach". Your task is to provide nuanced feedback on a user's choice of a new phrase.
-
         Here is the original conversation context:
         ${context.map(line => `${line.speaker}: ${line.text}`).join('\n')}
-
         The original phrase that was spoken was: "${originalPhrase}".
-
         The user's new, constructed phrase is: "${constructedPhrase}".
-
         Analyze the user's new phrase. Compare it to the original. Provide a rating out of 10. The analysis should be insightful and helpful, focusing on tone, formality, and linguistic effectiveness.
-
-        Use a conversational and encouraging tone. Your response should be direct and to the point. Start your response with a rating (e.g., "Rating: 9/10.").
-        `;
+        Use a conversational and encouraging tone. Your response should be direct and to the point. Start your response with a rating (e.g., "Rating: 9/10.").`;
 
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiApiKey}`;
         const payload = { contents: [{ parts: [{ text: prompt }] }] };
 
         try {
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
+            const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             if (!response.ok) {
                 console.error("API Error:", response.status, await response.text());
                 return "Sorry, I encountered an error. Please check the API key and try again.";
@@ -175,79 +161,13 @@ export default function SecondChanceGame(): React.ReactElement {
         }
     };
     
-    const getPhraseBlocks = async (
-    originalPhrase: string,
-    geminiApiKey: string
-): Promise<WordBlock[]> => {
-    const prompt = `
-        You are an expert linguistic analyst. Your task is to generate a single list of phrase blocks for a language learning game. The user needs to construct a grammatically correct and coherent sentence from these blocks.
-
-        1.  **Analyze the Original Phrase**: The original phrase is: "${originalPhrase}".
-        2.  **Generate a Solution Sentence**: Your primary goal is to first internally generate a single, complete sentence that is a compelling, high-quality alternative to the original phrase. This sentence should improve upon the original for clarity, tone, or emotional impact.
-        3.  **Create Correct Blocks**: Break down your generated solution sentence into 3-5 short, logical phrase blocks. These blocks should be grammatically sound fragments that, when combined in the correct order, form the complete sentence.
-        4.  **Create Incorrect Blocks**: Generate 3-5 additional phrase blocks that are linguistically related to the correct blocks (e.g., they might be incorrect verb tenses, awkward phrasings, or unrelated but plausible words). These blocks should be designed to be convincing distractions but will not form the correct solution sentence. They should not contain the original phrase or any of the correct blocks.
-        5.  **Combine and Output**: Combine the correct and incorrect blocks into a single JSON array named "phraseBlocks". The total number of blocks should be between 6 and 10.
-        6.  **Avoid Punctuation**: Do NOT include any punctuation in the generated blocks (e.g., no periods, commas, or question marks).
-        7.  **Final Output**: The final output must be a single, valid JSON object with the "phraseBlocks" array. Do not include any other text or explanation.
-
-        **Example for the phrase "hit the nail on the head":**
-        \`\`\`json
-        {
-          "phraseBlocks": [
-            "Your analysis was",
-            "the problem",
-            "insightful and",
-            "he hit it",
-            "capture the essence",
-            "on the top"
-          ]
-        }
-        \`\`\`
-    `;
-
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiApiKey}`;
-    const payload = { contents: [{ parts: [{ text: prompt }] }] };
-
-    try {
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-            console.error("API Error:", response.status, await response.text());
-            return [];
-        }
-
-        const result = await response.json();
-        let jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-
-        jsonText = jsonText.replace(/```json\n?|```/g, '');
-
-        const blocks = JSON.parse(jsonText);
-
-        return blocks.phraseBlocks.map((text: string, index: number) => ({ id: index + 1, text, category: "all" }));
-
-    } catch (error) {
-        console.error("Network or other error:", error);
-        return [];
-    }
-};
-    
     useEffect(() => {
         const fetchTimelineData = async () => {
             try {
-                const { data, error } = await supabase
-                    .from('Data')
-                    .select('phrase, context, created_at')
-                    .order('created_at', { ascending: false });
-
+                const { data, error } = await supabase.from('Data').select('phrase, context, created_at').order('created_at', { ascending: false });
                 if (error) throw error;
-                
-                const geminiApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY as string;
 
-                const formattedData: TimelineEvent[] = await Promise.all(data.map(async (row, index) => {
+                const formattedData: TimelineEvent[] = data.map((row, index) => {
                     const originalPhrase = row.phrase;
                     const fullText = row.context;
                     
@@ -255,68 +175,35 @@ export default function SecondChanceGame(): React.ReactElement {
                     const phraseIndex = sentences.findIndex((s: string) => s.includes(originalPhrase));
 
                     let parsedContext: Conversation = [];
-
                     if (phraseIndex !== -1) {
-                        for (let i = 0; i < phraseIndex; i++) {
-                            parsedContext.push({ speaker: 'Speaker A', text: sentences[i].trim() });
-                        }
-
-                        parsedContext.push({ speaker: 'You', text: sentences[phraseIndex].trim() });
-                        
-                        for (let i = phraseIndex + 1; i < sentences.length; i++) {
-                            parsedContext.push({ speaker: 'Speaker B', text: sentences[i].trim() });
+                        for (let i = 0; i < sentences.length; i++) {
+                            parsedContext.push({ speaker: i < phraseIndex ? 'Speaker A' : (i === phraseIndex ? 'You' : 'Speaker B'), text: sentences[i].trim() });
                         }
                     } else {
-                        parsedContext = [
-                            { speaker: 'Speaker A', text: 'An unexpected conversation occurred.' },
-                            { speaker: 'You', text: originalPhrase },
-                            { speaker: 'Speaker B', text: 'This moment is a little fuzzy.' }
-                        ];
+                        parsedContext = [{ speaker: 'You', text: originalPhrase }];
                     }
-
-                    const phraseBlocks = await getPhraseBlocks(originalPhrase, geminiApiKey);
-
+                    
                     return {
                         id: index + 1,
                         time: new Date(row.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
                         description: `Moment at ${new Date(row.created_at).toLocaleTimeString()}`,
                         originalPhrase: originalPhrase,
                         context: parsedContext,
-                        phraseBlocks: phraseBlocks,
-                        feedback: {
-                            excellent: `Excellent alternative! '${row.phrase}' is a perfect substitute. It maintains the professional but frustrated tone of the original conversation. This would have been a great thing to say. 10/10.`,
-                            interesting: "Interesting choice! 'That's a bummer' is grammatically correct, but it might have sounded a little too casual for this meeting. It's a better fit for social situations. 6/10.",
-                        }
                     };
-                }));
+                });
 
                 setTimelineData(formattedData);
                 setGameState('TIMELINE');
             } catch (err) {
-                console.error("Error fetching or processing data from Supabase:", err);
+                console.error("Error fetching data from Supabase:", err);
                 setGameState('TIMELINE'); 
             }
         };
 
         const keyFromEnv = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
-        if (keyFromEnv) {
-            setApiKey(keyFromEnv);
-        }
-
+        if (keyFromEnv) setApiKey(keyFromEnv);
         fetchTimelineData();
     }, []);
-
-    const constructedText = builtPhrase.map(b => b.text).join(' ');
-
-    const handleAddToPhrase = (block: WordBlock) => {
-        if (!builtPhrase.some(b => b.id === block.id)) {
-            setBuiltPhrase([...builtPhrase, block]);
-        }
-    };
-
-    const handleResetPhrase = () => {
-        setBuiltPhrase([]);
-    };
 
     const handleSelectEvent = (event: TimelineEvent) => {
         setSelectedEvent(event);
@@ -324,7 +211,7 @@ export default function SecondChanceGame(): React.ReactElement {
     };
     
     const handleRehearse = async () => {
-        if (!constructedText || isRehearsing || !apiKey) return;
+        if (!userTypedPhrase || isRehearsing || !apiKey) return;
         setIsRehearsing(true);
         const VOICE_ID = '21m00Tcm4TlvDq8ikWAM';
         const API_URL = `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`;
@@ -332,7 +219,7 @@ export default function SecondChanceGame(): React.ReactElement {
             const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'xi-api-key': apiKey },
-                body: JSON.stringify({ text: constructedText, model_id: 'eleven_monolingual_v1' }),
+                body: JSON.stringify({ text: userTypedPhrase, model_id: 'eleven_monolingual_v1' }),
             });
             if (!response.ok) throw new Error(`ElevenLabs TTS Error: ${await response.text()}`);
             const audioBlob = await response.blob();
@@ -373,22 +260,26 @@ export default function SecondChanceGame(): React.ReactElement {
         }
     };
 
+    const findTermIdByPhrase = async (phrase: string): Promise<number | null> => {
+        const { data, error } = await supabase.from('Term').select('id').eq('term', phrase).single();
+        if (error || !data) {
+            console.error('Could not find term_id for phrase:', phrase);
+            return null;
+        }
+        return data.id;
+    };
+
     const handlePlayFinalCut = async () => {
         if (!userAudio || !apiKey || isGeneratingFinalCut || !selectedEvent) return;
         setIsGeneratingFinalCut(true);
 
-        const TARGET_VOICE_ID = '21m00Tcm4TlvDq8ikWAM';
-
         try {
             const userPerformanceAudio = new Audio(userAudio);
+            const otherLines = selectedEvent.context.filter(conv => !conv.text.includes(selectedEvent.originalPhrase)).map(conv => conv.text);
             
-            const otherLines = selectedEvent.context
-                .filter(conv => conv.speaker !== 'You')
-                .map(conv => conv.text);
-            
-            const otherAudioUrls = [];
+            const otherAudioUrls: string[] = [];
             for (const line of otherLines) {
-                const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${TARGET_VOICE_ID}`, {
+                const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'xi-api-key': apiKey },
                     body: JSON.stringify({ text: line, model_id: 'eleven_monolingual_v1' }),
@@ -398,139 +289,159 @@ export default function SecondChanceGame(): React.ReactElement {
                 otherAudioUrls.push(URL.createObjectURL(blob));
             }
 
-            const playAudioSequence = async (audios: HTMLAudioElement[], index: number) => {
+            const playAudioSequence = async (audios: (HTMLAudioElement | null)[], index: number) => {
                 if (index >= audios.length) {
-                    const constructedText = builtPhrase.map(b => b.text).join(' ');
                     const geminiFeedback = await getGeminiResponse(
                         selectedEvent.originalPhrase,
-                        constructedText,
+                        userTypedPhrase,
                         selectedEvent.context,
                         process.env.NEXT_PUBLIC_GEMINI_API_KEY as string
                     );
                     setFeedback(geminiFeedback);
+              
+                    const ratingMatch = geminiFeedback.match(/Rating:\s*(\d{1,2})\/10/);
+                    const score = ratingMatch ? parseInt(ratingMatch[1], 10) : null;
+                    const termId = await findTermIdByPhrase(selectedEvent.originalPhrase);
+
+                    if (termId) {
+                        await supabase.from('PracticeLog').insert({
+                            term_id: termId,
+                            game: 'SecondChance',
+                            event_type: 'phrase_rebuilt',
+                            score: score,
+                            metadata: {
+                                original_phrase: selectedEvent.originalPhrase,
+                                new_phrase: userTypedPhrase
+                            }
+                        });
+                    }
+              
                     setIsGeneratingFinalCut(false);
                     setGameState('FEEDBACK');
                     return;
                 }
-                audios[index].play();
-                audios[index].onended = () => {
+                const currentAudio = audios[index];
+                if(currentAudio){
+                    currentAudio.play();
+                    currentAudio.onended = () => playAudioSequence(audios, index + 1);
+                } else {
                     playAudioSequence(audios, index + 1);
-                };
+                }
             };
             
-            const allAudios = [];
-            const userLineIndex = selectedEvent.context.findIndex(c => c.speaker === 'You');
-            let otherIndex = 0;
-            for (let i = 0; i < selectedEvent.context.length; i++) {
-                if (i === userLineIndex) {
-                    allAudios.push(userPerformanceAudio);
-                } else {
-                    allAudios.push(new Audio(otherAudioUrls[otherIndex]));
-                    otherIndex++;
-                }
-            }
-            playAudioSequence(allAudios, 0);
+            const finalAudioSequence = selectedEvent.context.map((line) => {
+                if (line.speaker === 'You') return userPerformanceAudio;
+                const otherLineIndex = selectedEvent.context.filter((l) => l.speaker !== 'You' && selectedEvent.context.indexOf(l) < selectedEvent.context.indexOf(line)).length;
+                return new Audio(otherAudioUrls[otherLineIndex]);
+            });
+
+            playAudioSequence(finalAudioSequence, 0);
 
         } catch (error) {
-            console.error("Error with ElevenLabs STS:", error);
+            console.error("Error generating final cut:", error);
             alert("Sorry, the final cut couldn't be generated.");
             setIsGeneratingFinalCut(false);
         }
     };
     
+    const resetGame = () => {
+        setGameState('TIMELINE');
+        setSelectedEvent(null);
+        setUserTypedPhrase('');
+        setUserAudio(null);
+        setFeedback(null);
+    };
+    
     const renderGameState = () => {
         switch (gameState) {
-            case 'LOADING':
-                return (
-                    <div className="text-center">
-                        <Loader2 className="mx-auto h-12 w-12 text-blue-500 animate-spin" />
-                        <p className="mt-4 text-gray-900">Loading your timeline...</p>
-                    </div>
-                );
-            case 'TIMELINE':
-                return <TimelineView onSelectEvent={handleSelectEvent} timelineData={timelineData} />;
+            case 'LOADING': return <div className="text-center"><Loader2 className="mx-auto h-12 w-12 text-blue-500 animate-spin" /><p className="mt-4 text-gray-900">Loading your timeline...</p></div>;
+            case 'TIMELINE': return <TimelineView onSelectEvent={handleSelectEvent} timelineData={timelineData} />;
             case 'REPLAY':
-                if (!selectedEvent) return <p>Error: No event selected.</p>;
+                if (!selectedEvent) return null;
                 return (
                     <div className="text-center">
-                        <div className="mb-4 flex items-center justify-between">
-                            <button onClick={() => setGameState('TIMELINE')} className="text-gray-600 hover:underline flex items-center">
-                                <ArrowLeft size={16} className="mr-1" /> Back
-                            </button>
-                            <h2 className="text-2xl font-bold text-center text-black flex-1">The Replay</h2>
-                            <div className="w-12"></div>
-                        </div>
+                        <div className="mb-4 flex items-center justify-between"><button onClick={resetGame} className="text-gray-600 hover:underline flex items-center"><ArrowLeft size={16} className="mr-1" /> Back</button><h2 className="text-2xl font-bold text-center text-black flex-1">The Replay</h2><div className="w-12"></div></div>
                         <div className="bg-gray-100 p-4 rounded-lg text-left space-y-2 mb-6 text-gray-900">
-                             {selectedEvent.context.map((line, index) => (
-                                <p key={index} className={line.speaker === 'You' ? "bg-yellow-200 p-2 rounded" : ""}>
-                                    <span className="font-bold">{line.speaker}:</span> {line.text}
-                                </p>
-                            ))}
+                             {selectedEvent.context.map((line, index) => {
+                                 if (line.speaker === 'You') {
+                                     return (
+                                         <p key={index}>
+                                             <span className="font-bold">You:</span> <span className="bg-black text-black select-none rounded px-1">
+                                                 {selectedEvent.originalPhrase}
+                                             </span>
+                                         </p>
+                                     )
+                                 }
+                                 return (
+                                     <p key={index}>
+                                         <span className="font-bold">{line.speaker}:</span> {line.text}
+                                     </p>
+                                 )
+                             })}
                         </div>
-                        <p className="mb-6 text-gray-900">The original phrase was "<span className="font-semibold">{selectedEvent.originalPhrase}</span>." Let's build a better one.</p>
-                        <button onClick={() => setGameState('PHRASE_BUILDER')} className="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg">Start Building</button>
+                        <p className="mb-6 text-gray-900">Your original response has been hidden. Try to remember what you said, or come up with a better phrase.</p>
+                        <button onClick={() => setGameState('INPUT')} className="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg">Get a Second Chance</button>
                     </div>
                 );
-            case 'PHRASE_BUILDER':
-                if (!selectedEvent) return <p>Error: No event selected.</p>;
-                return (
-                    <PhraseBuilderView
-                        selectedEvent={selectedEvent}
-                        builtPhrase={builtPhrase}
-                        handleAddToPhrase={handleAddToPhrase}
-                        handleResetPhrase={handleResetPhrase}
-                        onLockInPhrase={() => setGameState('REHEARSAL')}
-                        onBackToTimeline={() => setGameState('TIMELINE')}
-                    />
-                );
+            case 'INPUT':
+                if (!selectedEvent) return null;
+                return <InputView 
+                    context={selectedEvent.context}
+                    onBackToTimeline={resetGame}
+                    onPhraseSubmit={(phrase) => {
+                        setUserTypedPhrase(phrase);
+                        setGameState('REHEARSAL');
+                    }}
+                />;
             case 'REHEARSAL':
             case 'PERFORMANCE':
             case 'FINAL_CUT':
-                if (!selectedEvent) return <p>Error: No event selected.</p>;
+                if (!selectedEvent) return null;
                 return (
                     <div>
                         <h2 className="text-2xl font-bold mb-4 text-center text-black">The Performance Round</h2>
                         <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg text-center mb-6">
-                            <p className="text-2xl font-semibold text-blue-900">"{constructedText}"</p>
+                            <p className="text-2xl font-semibold text-blue-900">"{userTypedPhrase}"</p>
                         </div>
                         <div className="text-center mb-8">
                             <h3 className="font-bold text-lg mb-2 text-black">Step 1: Rehearse It</h3>
-                            <p className="text-gray-900 mb-3">Hear how it sounds with realistic AI voice.</p>
-                            <button onClick={handleRehearse} disabled={isRehearsing} className="bg-gray-700 text-white font-bold py-2 px-6 rounded-lg flex items-center justify-center mx-auto w-48">
-                                <Ear className="mr-2"/> {isRehearsing ? 'Listening...' : 'Rehearse'}
-                            </button>
+                            <p className="text-gray-900 mb-3">Hear how it sounds.</p>
+                            <button onClick={handleRehearse} disabled={isRehearsing} className="bg-gray-700 text-white font-bold py-2 px-6 rounded-lg flex items-center justify-center mx-auto w-48"><Ear className="mr-2"/> {isRehearsing ? 'Listening...' : 'Rehearse'}</button>
                         </div>
                         <div className="text-center mb-8">
                             <h3 className="font-bold text-lg mb-2 text-black">Step 2: Perform It</h3>
                             <p className="text-gray-900 mb-3">Now, it's your turn. Say the phrase out loud.</p>
-                            <button onClick={handlePerformance} className={`${isRecording ? 'bg-red-600' : 'bg-green-600'} text-white font-bold py-2 px-6 rounded-lg flex items-center justify-center mx-auto w-48`}>
-                                {isRecording ? <><Square className="mr-2"/> Stop</> : <><Mic className="mr-2"/> Perform</>}
-                            </button>
+                            <button onClick={handlePerformance} className={`${isRecording ? 'bg-red-600' : 'bg-green-600'} text-white font-bold py-2 px-6 rounded-lg flex items-center justify-center mx-auto w-48`}>{isRecording ? <><Square className="mr-2"/> Stop</> : <><Mic className="mr-2"/> Perform</>}</button>
                         </div>
                         {gameState === 'FINAL_CUT' && userAudio && (
                             <div className="text-center p-4 border-t-2 mt-4">
                                 <h3 className="font-bold text-lg mb-2 text-black">Step 3: Hear the Final Cut</h3>
                                 <p className="text-gray-900 mb-3">Listen to the conversation with your voice dubbed in!</p>
-                                <button onClick={handlePlayFinalCut} disabled={isGeneratingFinalCut} className="bg-purple-600 text-white font-bold py-2 px-6 rounded-lg flex items-center justify-center mx-auto w-48 disabled:bg-purple-300">
-                                    {isGeneratingFinalCut ? <Loader2 className="mr-2 animate-spin"/> : <Play className="mr-2"/>}
-                                    {isGeneratingFinalCut ? 'Generating...' : 'Play Final Cut'}
-                                </button>
+                                <button onClick={handlePlayFinalCut} disabled={isGeneratingFinalCut} className="bg-purple-600 text-white font-bold py-2 px-6 rounded-lg flex items-center justify-center mx-auto w-48 disabled:bg-purple-300">{isGeneratingFinalCut ? <Loader2 className="mr-2 animate-spin"/> : <Play className="mr-2"/>} {isGeneratingFinalCut ? 'Generating...' : 'Play Final Cut'}</button>
                             </div>
                         )}
-                        <div className="text-center mt-8">
-                            <button onClick={() => { setGameState('TIMELINE'); setBuiltPhrase([]); setUserAudio(null); setSelectedEvent(null); }} className="text-sm text-gray-800 hover:underline"><Rewind className="inline mr-1" size={16}/> Start Over</button>
-                        </div>
+                        <div className="text-center mt-8"><button onClick={resetGame} className="text-sm text-gray-800 hover:underline"><Rewind className="inline mr-1" size={16}/> Start Over</button></div>
                     </div>
                 );
             case 'FEEDBACK':
+                if (!selectedEvent) return null;
                 return (
                     <div className="text-center">
                         <h2 className="text-2xl font-bold mb-4 text-black">AI Coach Feedback</h2>
                         <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-lg text-left mb-6">
                             <p className="text-lg text-green-900 font-semibold">{feedback}</p>
                         </div>
-                        <p className="mb-6 text-gray-900">How did it feel to perform your new phrase?</p>
-                        <button onClick={() => { setGameState('TIMELINE'); setBuiltPhrase([]); setUserAudio(null); setSelectedEvent(null); setFeedback(null); }} className="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg">Play Again</button>
+                        <div className="text-left bg-gray-50 p-4 rounded-lg space-y-2 mb-6">
+                             <div>
+                                <p className="text-sm font-semibold text-gray-600">YOUR NEW PHRASE</p>
+                                <p className="text-lg text-blue-600 font-semibold">"{userTypedPhrase}"</p>
+                            </div>
+                             <div>
+                                <p className="text-sm font-semibold text-gray-600">ORIGINAL PHRASE</p>
+                                <p className="text-lg text-gray-800">"{selectedEvent.originalPhrase}"</p>
+                            </div>
+                        </div>
+                        <button onClick={resetGame} className="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg">Play Again</button>
                     </div>
                 );
         }
