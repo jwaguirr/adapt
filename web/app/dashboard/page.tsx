@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { ArrowDownAZ, History, Play, Languages, BookOpen } from "lucide-react"; // Import new icons
+import { ArrowDownAZ, History, Play, Languages, BookOpen } from "lucide-react"; 
 import { createClient } from "@supabase/supabase-js";
 import Navbar from "../components/Navbar";
 
@@ -28,7 +28,6 @@ type SortOrder = "recent" | "alphabetical";
 type DisplayMode = "context" | "translation";
 
 export default function Dashboard(): React.ReactElement {
-  // Format time for context column
   function formatDisplayTime(dateString: string): string {
     const date = new Date(dateString);
     const now = new Date();
@@ -53,9 +52,7 @@ export default function Dashboard(): React.ReactElement {
     }
   }
 
-  // Format context to highlight the term in context
   function formatContext(context: string, term: string): string {
-    // Use regex object for safety and clarity
     const regex = new RegExp(
       `(${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
       "gi"
@@ -93,7 +90,6 @@ export default function Dashboard(): React.ReactElement {
       if (error) {
         console.error("Error fetching phrases:", error);
       } else if (data) {
-        // Map returned data to PhraseCard structure
         const mapped = data.map((item: any) => ({
           id: item.id,
           phrase: item.Term?.term || item.term || "",

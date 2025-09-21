@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
+
+import { useSearchParams } from "next/navigation";
 import {
   ChevronLeft,
   ChevronRight,
@@ -22,6 +24,9 @@ interface Card {
   back: string;
   learned?: boolean;
   encountered?: boolean;
+  srs_level: number;
+  next_review_at: string;
+  last_reviewed_at: string | null;
 }
 
 interface FilterSettings {
@@ -33,7 +38,8 @@ const supabaseUrl = "https://myynwsmgvnrpekpzvhkp.supabase.co";
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseKey);
 const ELEVENLABS_VOICE_ID_ENGLISH = "21m00Tcm4TlvDq8ikWAM";
-const ELEVENLABS_VOICE_ID_SPANISH = "ThT5KcBeYPX3keUQqHPh"; // Spanish voice
+const ELEVENLABS_VOICE_ID_SPANISH = "ThT5KcBeYPX3keUQqHPh";
+const srsIntervals = [1, 3, 7, 14, 30, 90, 180, 365];
 
 const shuffleArray = <T,>(array: T[]): T[] => {
   const newArray = [...array];
@@ -44,7 +50,19 @@ const shuffleArray = <T,>(array: T[]): T[] => {
   return newArray;
 };
 
-export default function FlashcardGame(): React.ReactElement {
+export default function FlashcardGameWrapper() {
+  return (
+    <React.Suspense fallback={<div>Loading...</div>}>
+      <FlashcardGame />
+    </React.Suspense>
+  )
+}
+
+
+function FlashcardGame(): React.ReactElement {
+  const searchParams = useSearchParams();
+  const targetTermId = searchParams.get('termId');
+
   const [sourceCards, setSourceCards] = useState<Card[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
@@ -65,40 +83,23 @@ export default function FlashcardGame(): React.ReactElement {
 
   useEffect(() => {
     const keyFromEnv = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
-    if (keyFromEnv) {
-      setApiKey(keyFromEnv);
-    }
-
+    if (keyFromEnv) setApiKey(keyFromEnv);
     fetchAndSetCards();
   }, []);
 
   const fetchAndSetCards = async () => {
     setLoading(true);
-    
-    // Get all terms
-    const { data: termsData, error: termsError } = await supabase
-      .from("Term")
-      .select("id, term, translation_spanish, learned");
-
+    const { data: termsData, error: termsError } = await supabase.from("Term").select("*");
     if (termsError) {
       console.error("Error fetching terms:", termsError);
       setLoading(false);
       return;
     }
 
-    // Get encountered term IDs
-    const { data: encountersData, error: encountersError } = await supabase
-      .from("Encounter")
-      .select("term_id");
-
-    if (encountersError) {
-      console.error("Error fetching encounters:", encountersError);
-      setLoading(false);
-      return;
-    }
-
+    const { data: encountersData, error: encountersError } = await supabase.from("Encounter").select("term_id");
+    if (encountersError) console.error("Error fetching encounters:", encountersError);
+    
     const encounteredTermIds = new Set(encountersData?.map(e => e.term_id) || []);
-
     if (termsData) {
       const formattedCards: Card[] = termsData.map((term) => ({
         id: term.id,
@@ -106,52 +107,57 @@ export default function FlashcardGame(): React.ReactElement {
         back: term.translation_spanish,
         learned: term.learned || false,
         encountered: encounteredTermIds.has(term.id),
+        srs_level: term.srs_level,
+        next_review_at: term.next_review_at,
+        last_reviewed_at: term.last_reviewed_at,
       }));
-
       setSourceCards(formattedCards);
       setLoading(false);
     }
   };
 
-  // Filter cards based on current settings
   const filteredCards = useMemo(() => {
     let filtered = [...sourceCards];
-
-    // Filter by term source (all vs encountered)
-    if (filterSettings.termSource === 'encountered') {
-      filtered = filtered.filter(card => card.encountered);
-    }
-
-    // Filter by learned status
-    if (!filterSettings.includeLearned) {
-      filtered = filtered.filter(card => !card.learned);
-    }
-
-    return filtered;
+    if (filterSettings.termSource === 'encountered') filtered = filtered.filter(card => card.encountered);
+    if (!filterSettings.includeLearned) filtered = filtered.filter(card => !card.learned);
+    return filtered.sort((a, b) => new Date(a.next_review_at).getTime() - new Date(b.next_review_at).getTime());
   }, [sourceCards, filterSettings]);
 
-  // Update cards when filters change
   useEffect(() => {
-    if (filteredCards.length > 0) {
-      setCards(shuffleArray(filteredCards));
-      setCurrentIndex(0);
-      setIsFlipped(false);
-      setSelectedAnswer(null);
-      setIsCorrect(null);
+    if (filteredCards.length === 0) return;
+
+    let initialIndex = 0;
+    let deck = [...filteredCards];
+
+    if (targetTermId) {
+        const targetId = parseInt(targetTermId, 10);
+        const foundIndex = deck.findIndex(card => card.id === targetId);
+
+        if (foundIndex !== -1) {
+            initialIndex = 0; 
+            const targetCard = deck.splice(foundIndex, 1)[0];
+            deck.unshift(targetCard);
+        }
     }
-  }, [filteredCards]);
+
+    setCards(deck);
+    setCurrentIndex(initialIndex);
+  }, [filteredCards, targetTermId]); 
+
+  useEffect(() => {
+    setIsFlipped(false);
+    setSelectedAnswer(null);
+    setIsCorrect(null);
+  }, [currentIndex]);
+
 
   const currentCard = cards[currentIndex];
 
   const answerOptions = useMemo<string[]>(() => {
     if (!currentCard) return [];
     const correctAnswer = currentCard.back;
-    // Always use all source cards for answer options, not just filtered ones
-    const wrongAnswers = sourceCards
-      .filter((card) => card.id !== currentCard.id)
-      .map((card) => card.back);
-    const shuffledWrongAnswers = shuffleArray(wrongAnswers).slice(0, 3);
-    return shuffleArray([correctAnswer, ...shuffledWrongAnswers]);
+    const wrongAnswers = sourceCards.filter((card) => card.id !== currentCard.id).map((card) => card.back);
+    return shuffleArray([correctAnswer, ...shuffleArray(wrongAnswers).slice(0, 3)]);
   }, [currentIndex, cards, currentCard, sourceCards]);
 
   const handleTextToSpeech = async (text: string, isSpanish: boolean = false) => {
@@ -193,9 +199,6 @@ export default function FlashcardGame(): React.ReactElement {
   };
 
   const handleNext = (): void => {
-    setIsFlipped(false);
-    setSelectedAnswer(null);
-    setIsCorrect(null);
     if (currentIndex < cards.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
@@ -205,32 +208,58 @@ export default function FlashcardGame(): React.ReactElement {
 
   const handlePrev = (): void => {
     if (currentIndex > 0) {
-      setIsFlipped(false);
-      setSelectedAnswer(null);
-      setIsCorrect(null);
       setCurrentIndex(currentIndex - 1);
     }
   };
 
-  const handleSelectAnswer = (answer: string): void => {
+  const handleSelectAnswer = async (answer: string) => {
     if (selectedAnswer) return;
+
+    const card = cards[currentIndex];
+    const isAnswerCorrect = answer === card.back;
+
     setSelectedAnswer(answer);
-    if (answer === currentCard.back) {
-      setIsCorrect(true);
-      setCorrectCount((prev) => prev + 1);
+    setIsCorrect(isAnswerCorrect);
+
+    let newSrsLevel = card.srs_level || 0;
+    if (isAnswerCorrect) {
+        setCorrectCount((prev) => prev + 1);
+        newSrsLevel = Math.min(newSrsLevel + 1, srsIntervals.length - 1);
     } else {
-      setIsCorrect(false);
-      setIncorrectCount((prev) => prev + 1);
+        setIncorrectCount((prev) => prev + 1);
+        newSrsLevel = Math.max(0, newSrsLevel - 1);
     }
+
+    const intervalDays = srsIntervals[newSrsLevel];
+    const nextReviewDate = new Date();
+    nextReviewDate.setDate(nextReviewDate.getDate() + intervalDays);
+    
+    const { error: updateError } = await supabase
+        .from('Term')
+        .update({
+            srs_level: newSrsLevel,
+            next_review_at: nextReviewDate.toISOString(),
+            last_reviewed_at: new Date().toISOString(),
+        })
+        .eq('id', card.id);
+
+    if (updateError) {
+        console.error("Error updating SRS data:", updateError);
+    }
+
+    await supabase.from('PracticeLog').insert({
+        term_id: card.id,
+        game: 'Flashcards',
+        event_type: isAnswerCorrect ? 'correct_answer' : 'incorrect_answer',
+    });
+
     setTimeout(() => handleNext(), 1500);
   };
 
   const handleRestart = (): void => {
+    window.history.pushState({}, '', '/flashcards'); 
     setCards(shuffleArray(filteredCards));
     setCurrentIndex(0);
-    setIsFlipped(false);
-    setSelectedAnswer(null);
-    setIsCorrect(null);
     setCorrectCount(0);
     setIncorrectCount(0);
     setShowSummary(false);
@@ -251,7 +280,7 @@ export default function FlashcardGame(): React.ReactElement {
   const handleFilterChange = (newSettings: Partial<FilterSettings>) => {
     setFilterSettings(prev => ({ ...prev, ...newSettings }));
   };
-
+  
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 font-sans">
@@ -311,7 +340,6 @@ export default function FlashcardGame(): React.ReactElement {
         className="flex flex-col items-center justify-center p-4"
         style={{ minHeight: "calc(100vh - 4rem)" }}
       >
-        {/* Settings Panel */}
         {showSettings && (
           <div className="fixed inset-0 flex items-center justify-center z-50" style={{backgroundColor: 'rgba(0, 0, 0, 0.4)'}}>
             <div className="bg-white p-6 rounded-xl shadow-xl max-w-md w-full mx-4">
@@ -326,7 +354,6 @@ export default function FlashcardGame(): React.ReactElement {
               </div>
               
               <div className="space-y-6">
-                {/* Term Source Filter */}
                 <div>
                   <h4 className="text-sm font-semibold text-gray-700 mb-3">Term Source</h4>
                   <div className="space-y-2">
@@ -357,7 +384,6 @@ export default function FlashcardGame(): React.ReactElement {
                   </div>
                 </div>
 
-                {/* Learned Terms Filter */}
                 <div>
                   <h4 className="text-sm font-semibold text-gray-700 mb-3">Learned Terms</h4>
                   <label className="flex items-center space-x-3">
@@ -376,7 +402,6 @@ export default function FlashcardGame(): React.ReactElement {
                   </p>
                 </div>
 
-                {/* Results Summary */}
                 <div className="bg-gray-50 p-3 rounded-lg">
                   <p className="text-sm text-gray-600">
                     <strong>{filteredCards.length}</strong> terms match your current filters
@@ -398,7 +423,6 @@ export default function FlashcardGame(): React.ReactElement {
 
         {cards.length > 0 && currentCard ? (
           <div className="w-full max-w-2xl">
-            {/* Filter indicator */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-2 text-sm text-gray-600">
                 <Filter size={16} />
@@ -428,7 +452,7 @@ export default function FlashcardGame(): React.ReactElement {
                 className={`w-full h-64 transition-transform duration-700 transform-style-preserve-3d rounded-xl shadow-lg cursor-pointer ${
                   isFlipped ? "rotate-y-180" : ""
                 }`}
-                onClick={() => setIsFlipped(!isFlipped)}
+                onClick={() => setIsFlipped(prevIsFlipped => !prevIsFlipped)}
               >
                 <div className="absolute w-full h-full backface-hidden bg-white flex flex-col items-center justify-center p-6 rounded-xl border">
                   <button
@@ -444,7 +468,6 @@ export default function FlashcardGame(): React.ReactElement {
                   <p className="text-4xl font-bold text-center">
                     {currentCard.front}
                   </p>
-                  {/* Show indicators */}
                   <div className="absolute bottom-4 left-4 flex space-x-2">
                     {currentCard.learned && (
                       <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs">
@@ -562,3 +585,4 @@ export default function FlashcardGame(): React.ReactElement {
     </div>
   );
 }
+
