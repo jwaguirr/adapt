@@ -322,7 +322,7 @@ export default function DialogueDuelPage(): React.ReactElement {
                                             className="text-blue-600"
                                         />
                                         <BookOpen size={18} className="text-gray-600" />
-                                        <span className="text-gray-900">My Terms ({allPhrases.filter(p => p.encountered).length})</span>
+                                        <span className="text-gray-900">Encountered Terms ({allPhrases.filter(p => p.encountered).length})</span>
                                     </label>
                                 </div>
                             </div>

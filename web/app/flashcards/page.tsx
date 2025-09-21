@@ -352,7 +352,7 @@ export default function FlashcardGame(): React.ReactElement {
                         className="text-blue-600"
                       />
                       <BookOpen size={18} className="text-gray-500" />
-                      <span>My Terms ({sourceCards.filter(c => c.encountered).length})</span>
+                      <span>Encountered Terms ({sourceCards.filter(c => c.encountered).length})</span>
                     </label>
                   </div>
                 </div>
